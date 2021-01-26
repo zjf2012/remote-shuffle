@@ -62,17 +62,11 @@ public class DaosShuffleIO {
 
   private boolean removeShuffleData;
 
-  private DaosWriter.WriteConfig writeConfig;
-
   private Map<DaosReader, Integer> readerMap = new ConcurrentHashMap<>();
 
   private Map<DaosWriter, Integer> writerMap = new ConcurrentHashMap<>();
 
   private Map<String, DaosObject> objectMap = new ConcurrentHashMap<>();
-
-  private BoundThreadExecutors readerExes;
-
-  private BoundThreadExecutors writerExes;
 
   private static final Logger logger = LoggerFactory.getLogger(DaosShuffleIO.class);
 
