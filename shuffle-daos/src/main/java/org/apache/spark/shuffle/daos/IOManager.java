@@ -23,5 +23,66 @@
 
 package org.apache.spark.shuffle.daos;
 
-public class IOManager {
+import io.daos.obj.DaosObjClient;
+import io.daos.obj.DaosObject;
+import io.daos.obj.DaosObjectException;
+import io.daos.obj.DaosObjectId;
+import org.apache.spark.SparkConf;
+
+import java.io.IOException;
+import java.util.Map;
+
+public abstract class IOManager {
+
+  protected Map<String, DaosObject> objectMap;
+
+  protected SparkConf conf;
+
+  protected DaosObjClient objClient;
+
+  protected IOManager(SparkConf conf, Map<String, DaosObject> objectMap) {
+    this.conf = conf;
+    this.objectMap = objectMap;
+  }
+
+  private String getKey(long appId, int shuffleId) {
+    return appId + "" + shuffleId;
+  }
+
+  protected static long parseAppId(String appId) {
+    return Long.valueOf(appId.replaceAll("\\D", ""));
+  }
+
+  protected DaosObject getObject(long appId, int shuffleId) throws DaosObjectException {
+    String key = getKey(appId, shuffleId);
+    DaosObject object = objectMap.get(key);
+    if (object == null) {
+      DaosObjectId id = new DaosObjectId(appId, shuffleId);
+      id.encode();
+      object = objClient.getObject(id);
+      objectMap.putIfAbsent(key, object);
+      DaosObject activeObject = objectMap.get(key);
+      if (activeObject != object) { // release just created DaosObject
+        object.close();
+        object = activeObject;
+      }
+    }
+    // open just once in multiple threads
+    if (!object.isOpen()) {
+      synchronized (object) {
+        object.open();
+      }
+    }
+    return object;
+  }
+
+  public void setObjClient(DaosObjClient objClient) {
+    this.objClient = objClient;
+  }
+
+  abstract DaosWriter getDaosWriter(int numPartitions, int shuffleId, long mapId) throws IOException;
+
+  abstract DaosReader getDaosReader(int shuffleId) throws IOException;
+
+  abstract void close() throws IOException;
 }
