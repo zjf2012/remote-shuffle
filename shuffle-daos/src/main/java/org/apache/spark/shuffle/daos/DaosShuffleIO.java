@@ -72,7 +72,7 @@ public class DaosShuffleIO {
   public DaosShuffleIO(SparkConf conf) {
     this.conf = conf;
     boolean async = (boolean)conf.get(package$.MODULE$.SHUFFLE_DAOS_IO_ASYNC());
-    this.ioManager = async ? new IOManagerAsync(conf, objectMap) : new IOManagerSync(conf, objectMap);
+    this.ioManager = async ? new IOManagerSync(conf, objectMap) : new IOManagerSynctemp(conf, objectMap);
     this.removeShuffleData = (boolean)conf.get(package$.MODULE$.SHUFFLE_DAOS_REMOVE_SHUFFLE_DATA());
   }
 

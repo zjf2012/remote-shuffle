@@ -55,9 +55,9 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
 
   private WriteParam param;
 
-  private WriteConfig config;
+  private WriterConfig config;
 
-  private Map<DaosWriterSync, Integer> writerMap;
+  private Map<DaosWriter, Integer> writerMap;
 
   private NativeBuffer[] partitionBufArray;
 
@@ -81,7 +81,7 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
    * @param executor
    * null means write in caller's thread. Submit {@link WriteTask} to it otherwise.
    */
-  public DaosWriterSync(DaosWriterSync.WriteParam param, DaosObject object,
+  public DaosWriterSync(DaosObject object, DaosWriterSync.WriteParam param,
                         BoundThreadExecutors.SingleThreadExecutor executor) {
     super(executor);
     this.param = param;
@@ -94,7 +94,7 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
   private NativeBuffer getNativeBuffer(int partitionId) {
     NativeBuffer buffer = partitionBufArray[partitionId];
     if (buffer == null) {
-      buffer = new NativeBuffer(partitionId, config.bufferSize);
+      buffer = new NativeBuffer(partitionId, config.getBufferSize());
       partitionBufArray[partitionId] = buffer;
     }
     return buffer;
@@ -154,7 +154,7 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
       return;
     }
     totalWriteTimes++;
-    if (config.warnSmallWrite && buffer.roundSize < config.minSize) {
+    if (config.isWarnSmallWrite() && buffer.roundSize < config.getMinSize()) {
       LOG.warn("too small partition size {}, shuffle {}, map {}, partition {}",
           buffer.roundSize, param.shuffleId, mapId, partitionId);
     }
@@ -189,14 +189,14 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
     int timeoutTimes = 0;
     try {
       while (!goodForSubmit()) {
-        boolean timeout = waitForCondition(config.waitTimeMs);
+        boolean timeout = waitForCondition(config.getWaitTimeMs());
         moveForward();
         if (timeout) {
           timeoutTimes++;
           if (LOG.isDebugEnabled()) {
             LOG.debug("wait daos write timeout times: " + timeoutTimes);
           }
-          if (timeoutTimes >= config.timeoutTimes) {
+          if (timeoutTimes >= config.getTimeoutTimes()) {
             totalTimeoutTimes += timeoutTimes;
             runBySelf(desc, buffer);
             return;
@@ -214,7 +214,7 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
   }
 
   private boolean goodForSubmit() {
-    return totalInMemSize < config.totalInMemSize && totalSubmitted < config.totalSubmittedLimit;
+    return totalInMemSize < config.getTotalInMemSize() && totalSubmitted < config.getTotalSubmittedLimit();
   }
 
   private void submitAndReset(IODataDesc desc, NativeBuffer buffer) {
@@ -273,7 +273,7 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
     }
     try {
       while (totalSubmitted > 0) {
-        waitForCondition(config.waitTimeMs);
+        waitForCondition(config.getWaitTimeMs());
         moveForward();
       }
     } catch (Exception e) {
@@ -282,7 +282,7 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
     }
   }
 
-  public void setWriterMap(Map<DaosWriterSync, Integer> writerMap) {
+  public void setWriterMap(Map<DaosWriter, Integer> writerMap) {
     writerMap.put(this, 0);
     this.writerMap = writerMap;
   }
@@ -415,122 +415,11 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
     }
   }
 
-  /**
-   * Write configurations. Please check configs prefixed with SHUFFLE_DAOS_WRITE in {@link package$#MODULE$}.
-   */
-  public static class WriteConfig {
-    private int bufferSize;
-    private int minSize;
-    private boolean warnSmallWrite;
-    private long waitTimeMs;
-    private int timeoutTimes;
-    private long totalInMemSize;
-    private int totalSubmittedLimit;
-    private int threads;
-    private boolean fromOtherThreads;
-
-    public WriteConfig bufferSize(int bufferSize) {
-      this.bufferSize = bufferSize;
-      return this;
-    }
-
-    public WriteConfig minSize(int minSize) {
-      this.minSize = minSize;
-      return this;
-    }
-
-    public WriteConfig warnSmallWrite(boolean warnSmallWrite) {
-      this.warnSmallWrite = warnSmallWrite;
-      return this;
-    }
-
-    public WriteConfig waitTimeMs(long waitTimeMs) {
-      this.waitTimeMs = waitTimeMs;
-      return this;
-    }
-
-    public WriteConfig timeoutTimes(int timeoutTimes) {
-      this.timeoutTimes = timeoutTimes;
-      return this;
-    }
-
-    public WriteConfig totalInMemSize(long totalInMemSize) {
-      this.totalInMemSize = totalInMemSize;
-      return this;
-    }
-
-    public WriteConfig totalSubmittedLimit(int totalSubmittedLimit) {
-      this.totalSubmittedLimit = totalSubmittedLimit;
-      return this;
-    }
-
-    public WriteConfig threads(int threads) {
-      this.threads = threads;
-      return this;
-    }
-
-    public WriteConfig fromOtherThreads(boolean fromOtherThreads) {
-      this.fromOtherThreads = fromOtherThreads;
-      return this;
-    }
-
-    public int getBufferSize() {
-      return bufferSize;
-    }
-
-    public int getMinSize() {
-      return minSize;
-    }
-
-    public boolean isWarnSmallWrite() {
-      return warnSmallWrite;
-    }
-
-    public long getWaitTimeMs() {
-      return waitTimeMs;
-    }
-
-    public int getTimeoutTimes() {
-      return timeoutTimes;
-    }
-
-    public long getTotalInMemSize() {
-      return totalInMemSize;
-    }
-
-    public int getTotalSubmittedLimit() {
-      return totalSubmittedLimit;
-    }
-
-    public int getThreads() {
-      return threads;
-    }
-
-    public boolean isFromOtherThreads() {
-      return fromOtherThreads;
-    }
-
-    @Override
-    public String toString() {
-      return "WriteConfig{" +
-          "bufferSize=" + bufferSize +
-          ", minSize=" + minSize +
-          ", warnSmallWrite=" + warnSmallWrite +
-          ", waitTimeMs=" + waitTimeMs +
-          ", timeoutTimes=" + timeoutTimes +
-          ", totalInMemSize=" + totalInMemSize +
-          ", totalSubmittedLimit=" + totalSubmittedLimit +
-          ", threads=" + threads +
-          ", fromOtherThreads=" + fromOtherThreads +
-          '}';
-    }
-  }
-
   public static class WriteParam {
     private int numPartitions;
     private int shuffleId;
     private long mapId;
-    private WriteConfig config;
+    private DaosWriter.WriterConfig config;
 
     public WriteParam numPartitions(int numPartitions) {
       this.numPartitions = numPartitions;
@@ -547,7 +436,7 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
       return this;
     }
 
-    public WriteParam config(WriteConfig config) {
+    public WriteParam config(DaosWriter.WriterConfig config) {
       this.config = config;
       return this;
     }

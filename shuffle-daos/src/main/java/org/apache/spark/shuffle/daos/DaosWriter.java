@@ -23,6 +23,11 @@
 
 package org.apache.spark.shuffle.daos;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkEnv;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 
 /**
@@ -80,4 +85,91 @@ public interface DaosWriter {
    * close writer.
    */
   void close();
+
+  /**
+   * Write configurations. Please check configs prefixed with SHUFFLE_DAOS_WRITE in {@link package$#MODULE$}.
+   */
+  class WriterConfig {
+    private int bufferSize;
+    private int minSize;
+    private boolean warnSmallWrite;
+    private long waitTimeMs;
+    private int timeoutTimes;
+    private long totalInMemSize;
+    private int totalSubmittedLimit;
+    private int threads;
+    private boolean fromOtherThreads;
+
+    private static final Logger logger = LoggerFactory.getLogger(WriterConfig.class);
+
+    WriterConfig() {
+      SparkConf conf = SparkEnv.get().conf();
+      warnSmallWrite = (boolean) conf.get(package$.MODULE$.SHUFFLE_DAOS_WRITE_WARN_SMALL_SIZE());
+      bufferSize = (int) conf.get(package$.MODULE$.SHUFFLE_DAOS_WRITE_SINGLE_BUFFER_SIZE())
+          * 1024 * 1024;
+      minSize = (int) conf.get(package$.MODULE$.SHUFFLE_DAOS_WRITE_MINIMUM_SIZE()) * 1024;
+      timeoutTimes = (int)conf.get(package$.MODULE$.SHUFFLE_DAOS_WRITE_WAIT_DATA_TIMEOUT_TIMES());
+      waitTimeMs = (int)conf.get(package$.MODULE$.SHUFFLE_DAOS_WRITE_WAIT_MS());
+      totalInMemSize = (long)conf.get(package$.MODULE$.SHUFFLE_DAOS_WRITE_MAX_BYTES_IN_FLIGHT()) * 1024;
+      totalSubmittedLimit = (int)conf.get(package$.MODULE$.SHUFFLE_DAOS_WRITE_SUBMITTED_LIMIT());
+      threads = (int)conf.get(package$.MODULE$.SHUFFLE_DAOS_WRITE_THREADS());
+      fromOtherThreads = (boolean)conf
+          .get(package$.MODULE$.SHUFFLE_DAOS_WRITE_IN_OTHER_THREAD());
+      if (logger.isDebugEnabled()) {
+        logger.debug(toString());
+      }
+    }
+
+
+    public int getBufferSize() {
+      return bufferSize;
+    }
+
+    public int getMinSize() {
+      return minSize;
+    }
+
+    public boolean isWarnSmallWrite() {
+      return warnSmallWrite;
+    }
+
+    public long getWaitTimeMs() {
+      return waitTimeMs;
+    }
+
+    public int getTimeoutTimes() {
+      return timeoutTimes;
+    }
+
+    public long getTotalInMemSize() {
+      return totalInMemSize;
+    }
+
+    public int getTotalSubmittedLimit() {
+      return totalSubmittedLimit;
+    }
+
+    public int getThreads() {
+      return threads;
+    }
+
+    public boolean isFromOtherThreads() {
+      return fromOtherThreads;
+    }
+
+    @Override
+    public String toString() {
+      return "WriteConfig{" +
+          "bufferSize=" + bufferSize +
+          ", minSize=" + minSize +
+          ", warnSmallWrite=" + warnSmallWrite +
+          ", waitTimeMs=" + waitTimeMs +
+          ", timeoutTimes=" + timeoutTimes +
+          ", totalInMemSize=" + totalInMemSize +
+          ", totalSubmittedLimit=" + totalSubmittedLimit +
+          ", threads=" + threads +
+          ", fromOtherThreads=" + fromOtherThreads +
+          '}';
+    }
+  }
 }
