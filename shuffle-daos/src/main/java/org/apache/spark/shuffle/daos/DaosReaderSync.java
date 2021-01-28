@@ -40,7 +40,7 @@ import java.util.concurrent.locks.Lock;
  * A class with {@link DaosObject} wrapped to read data from DAOS in either caller's thread or
  * dedicated executor thread. The actual read is performed by {@link DaosObject#fetch(IODataDesc)}.
  */
-public class DaosReader {
+public class DaosReaderSync extends DaosReader {
 
   private DaosObject object;
 
@@ -61,7 +61,7 @@ public class DaosReader {
    * null means read in caller's thread. Submit {@link ReadTask} to dedicate executor retrieved by
    * {@link #nextReaderExecutor()} otherwise.
    */
-  public DaosReader(DaosObject object, BoundThreadExecutors executors) {
+  public DaosReaderSync(DaosObject object, BoundThreadExecutors executors) {
     this.object = object;
     this.executors = executors;
   }

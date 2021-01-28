@@ -100,12 +100,7 @@ public class DaosShuffleInputStream extends InputStream {
       long maxBytesInFlight, long maxMem, ShuffleReadMetricsReporter metrics) {
     this.partSizeMap = partSizeMap;
     this.reader = reader;
-    this.config = new ReaderConfig(maxBytesInFlight, maxMem);
-    this.fromOtherThread = config.fromOtherThread;
-    if (fromOtherThread) {
-      this.executor = reader.nextReaderExecutor();
-    }
-    this.source = new BufferSource(executor);
+    this.source = new BufferSource(reader);
     reader.register(source);
     this.object = reader.getObject();
     this.metrics = metrics;
@@ -256,8 +251,13 @@ public class DaosShuffleInputStream extends InputStream {
     private int totalParts = partSizeMap.size();
     private int partsRead;
 
-    protected BufferSource(BoundThreadExecutors.SingleThreadExecutor executor) {
-      super(executor);
+    protected BufferSource(DaosReader reader) {
+      super(reader.getExecutor());
+      this.config = new ReaderConfig(maxBytesInFlight, maxMem);
+      this.fromOtherThread = config.fromOtherThread;
+      if (fromOtherThread) {
+        this.executor = reader.nextReaderExecutor();
+      }
     }
 
     /**
