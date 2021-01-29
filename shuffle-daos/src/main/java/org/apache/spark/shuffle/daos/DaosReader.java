@@ -48,26 +48,12 @@ public interface DaosReader {
   DaosObject getObject();
 
   /**
-   * release resources of all {@link BufferSource}
-   * bound with this reader.
-   */
-  void close();
-
-  /**
-   * register buffer source for resource cleanup.
+   * release resources bound with this reader.
    *
-   * @param source
-   * BufferSource instance
+   * @param force
+   * force close even if there is on-going read
    */
-  void register(BufferSource source);
-
-  /**
-   * unregister buffer source if <code>source</code> is release already.
-   *
-   * @param source
-   * BufferSource instance
-   */
-  void unregister(BufferSource source);
+  void close(boolean force);
 
   /**
    * set global <code>readMap</code> and hook this reader for releasing resources.
@@ -78,6 +64,7 @@ public interface DaosReader {
   void setReaderMap(Map<DaosReader, Integer> readerMap);
 
   /**
+   * prepare read with some parameters.
    *
    * @param partSizeMap
    * @param maxBytesInFlight
@@ -87,79 +74,53 @@ public interface DaosReader {
    * @param metrics
    * @return
    */
-  BufferSource
-      createBufferSource(LinkedHashMap<Tuple2<Long, Integer>, Tuple3<Long, BlockId, BlockManagerId>> partSizeMap,
-                         long maxBytesInFlight, long maxReqSizeShuffleToMem,
-                         ShuffleReadMetricsReporter metrics);
+  void prepare(LinkedHashMap<Tuple2<Long, Integer>, Tuple3<Long, BlockId, BlockManagerId>> partSizeMap,
+               long maxBytesInFlight, long maxReqSizeShuffleToMem, ShuffleReadMetricsReporter metrics);
 
-  abstract class BufferSource {
-    protected long currentPartSize;
+  /**
+   * current map/reduce id being requested.
+   *
+   * @return map/reduce id tuple
+   */
+  Tuple2<Long, Integer> curMapReduceId();
 
-    protected Tuple2<Long, Integer> curMapReduceId;
-    protected Tuple2<Long, Integer> lastMapReduceIdForSubmit;
-    protected Tuple2<Long, Integer> lastMapReduceIdForReturn;
-    protected int curOffset;
-    protected boolean newMap;
+  /**
+   * get available buffer after iterating current buffer, next buffer in current desc and next desc.
+   *
+   * @return buffer with data read from DAOS
+   * @throws IOException
+   */
+  ByteBuf nextBuf() throws IOException;
 
-    protected LinkedHashMap<Tuple2<Long, Integer>, Tuple3<Long, BlockId, BlockManagerId>> partSizeMap;
-    protected int totalParts;
-    protected int partsRead;
+  /**
+   * All data from current map output is read and
+   * reach to data from next map?
+   *
+   * @return true or false
+   */
+  boolean isNextMap();
 
-    private ShuffleReadMetricsReporter metrics;
+  /**
+   * upper layer should call this method to read more map output
+   */
+  void setNextMap(boolean b);
 
-    protected BufferSource(LinkedHashMap<Tuple2<Long, Integer>, Tuple3<Long, BlockId, BlockManagerId>> partSizeMap,
-                           ShuffleReadMetricsReporter metrics) {
-      this.partSizeMap = partSizeMap;
-      this.metrics = metrics;
-      totalParts = partSizeMap.size();
-    }
+  /**
+   * check if all data from current map output is read.
+   */
+  void checkPartitionSize() throws IOException;
 
-    /**
-     * get available buffer after iterating current buffer, next buffer in current desc and next desc.
-     *
-     * @return buffer with data read from DAOS
-     * @throws IOException
-     */
-    public abstract ByteBuf nextBuf() throws IOException;
-
-    public void checkPartitionSize() throws IOException {
-      if (lastMapReduceIdForReturn == null) {
-        return;
-      }
-      // partition size is not accurate after compress/decompress
-      long size = partSizeMap.get(lastMapReduceIdForReturn)._1();
-      if (size < 35 * 1024 * 1024 * 1024 && currentPartSize * 1.1 < size) {
-        throw new IOException("expect partition size " + partSizeMap.get(lastMapReduceIdForReturn) +
-            ", actual size " + currentPartSize + ", mapId and reduceId: " + lastMapReduceIdForReturn);
-      }
-      metrics.incRemoteBlocksFetched(1);
-    }
-
-    public abstract boolean cleanup(boolean force);
-
-    public void checkTotalPartitions() throws IOException {
-      if (partsRead != totalParts) {
-        throw new IOException("expect total partitions to be read: " + totalParts + ", actual read: " + partsRead);
-      }
-    }
-
-    public Tuple2<Long, Integer> lastMapReduceIdForSubmit() {
-      return lastMapReduceIdForSubmit;
-    }
-
-    public boolean isNewMap() {
-      return newMap;
-    }
-
-    public void setNewMap(boolean newMap) {
-      this.newMap = newMap;
-    }
-  }
+  /**
+   * check if all map outputs are read.
+   *
+   * @throws IOException
+   */
+  void checkTotalPartitions() throws IOException;
 
   /**
    * reader configurations, please check configs prefixed with SHUFFLE_DAOS_READ in {@link package$#MODULE$}.
    */
-  public static final class ReaderConfig {
+  final class ReaderConfig {
     private long minReadSize;
     private long maxBytesInFlight;
     private long maxMem;

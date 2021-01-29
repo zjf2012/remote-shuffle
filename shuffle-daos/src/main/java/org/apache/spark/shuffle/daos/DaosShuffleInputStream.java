@@ -24,10 +24,7 @@
 package org.apache.spark.shuffle.daos;
 
 import io.daos.obj.DaosObject;
-import io.daos.obj.IODataDesc;
 import io.netty.buffer.ByteBuf;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.ShuffleReadMetricsReporter;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManagerId;
@@ -40,7 +37,6 @@ import javax.annotation.concurrent.NotThreadSafe;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
-import java.util.concurrent.*;
 
 @NotThreadSafe
 /**
@@ -67,9 +63,6 @@ public class DaosShuffleInputStream extends InputStream {
   // ensure the order of partition
   // (mapid, reduceid) -> (length, BlockId, BlockManagerId)
   private LinkedHashMap<Tuple2<Long, Integer>, Tuple3<Long, BlockId, BlockManagerId>> partSizeMap;
-  private Iterator<Tuple2<Long, Integer>> mapIdIt;
-
-  private DaosReader.BufferSource source;
 
   private static final Logger log = LoggerFactory.getLogger(DaosShuffleInputStream.class);
 
@@ -95,42 +88,41 @@ public class DaosShuffleInputStream extends InputStream {
       ShuffleReadMetricsReporter metrics) {
     this.partSizeMap = partSizeMap;
     this.reader = reader;
-    this.source = reader.createBufferSource(partSizeMap, maxBytesInFlight, maxReqSizeShuffleToMem, metrics);
+    reader.prepare(partSizeMap, maxBytesInFlight, maxReqSizeShuffleToMem, metrics);
     this.object = reader.getObject();
     this.metrics = metrics;
-    this.mapIdIt = partSizeMap.keySet().iterator();
   }
 
   public BlockId getCurBlockId() {
-    if (source.lastMapReduceIdForSubmit() == null) {
+    if (reader.curMapReduceId() == null) {
       return null;
     }
-    return partSizeMap.get(source.lastMapReduceIdForSubmit())._2();
+    return partSizeMap.get(reader.curMapReduceId())._2();
   }
 
   public BlockManagerId getCurOriginAddress() {
-    if (source.lastMapReduceIdForSubmit() == null) {
+    if (reader.curMapReduceId() == null) {
       return null;
     }
-    return partSizeMap.get(source.lastMapReduceIdForSubmit())._3();
+    return partSizeMap.get(reader.curMapReduceId())._3();
   }
 
   public long getCurMapIndex() {
-    if (source.lastMapReduceIdForSubmit() == null) {
+    if (reader.curMapReduceId() == null) {
       return -1;
     }
-    return source.lastMapReduceIdForSubmit()._1;
+    return reader.curMapReduceId()._1;
   }
 
   @Override
   public int read() throws IOException {
     while (!completed) {
-      ByteBuf buf = source.nextBuf();
+      ByteBuf buf = reader.nextBuf();
       if (buf == null) { // reach end
         complete();
         return -1;
       }
-      if (source.isNewMap()) { // indication to close upper layer object inputstream
+      if (reader.isNextMap()) { // indication to close upper layer object inputstream
         return -1;
       }
       if (buf.readableBytes() >= 1) {
@@ -149,13 +141,13 @@ public class DaosShuffleInputStream extends InputStream {
   public int read(byte[] bytes, int offset, int length) throws IOException {
     int len = length;
     while (!completed) {
-      ByteBuf buf = source.nextBuf();
+      ByteBuf buf = reader.nextBuf();
       if (buf == null) { // reach end
         complete();
         int r = length - len;
         return r == 0 ? -1 : r;
       }
-      if (source.isNewMap()) { // indication to close upper layer object inputstream
+      if (reader.isNextMap()) { // indication to close upper layer object inputstream
         int r = length - len;
         return r == 0 ? -1 : r;
       }
@@ -175,24 +167,20 @@ public class DaosShuffleInputStream extends InputStream {
    * upper layer should call this method to read more map output
    */
   public void nextMap() {
-    source.setNewMap(false);
+    reader.setNextMap(false);
   }
 
   private void complete() throws IOException {
     if (!completed) {
-      source.checkPartitionSize();
-      source.checkTotalPartitions();
+      reader.checkPartitionSize();
+      reader.checkTotalPartitions();
       completed = true;
     }
   }
 
   private void cleanup() {
     if (!cleaned) {
-      boolean allReleased = source.cleanup(false);
-      if (allReleased) {
-        reader.unregister(source);
-      }
-      source = null;
+      reader.close(false);
       cleaned = true;
       completed = true;
     }

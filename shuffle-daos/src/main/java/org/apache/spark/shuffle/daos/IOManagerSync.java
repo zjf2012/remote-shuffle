@@ -50,9 +50,7 @@ public class IOManagerSync extends IOManager {
   }
 
   private BoundThreadExecutors createReaderExes() {
-    boolean fromOtherThread = (boolean)conf
-        .get(package$.MODULE$.SHUFFLE_DAOS_READ_FROM_OTHER_THREAD());
-    if (fromOtherThread) {
+    if (readerConfig.isFromOtherThread()) {
       BoundThreadExecutors executors;
       int threads = (int)conf.get(package$.MODULE$.SHUFFLE_DAOS_READ_THREADS());
       if (threads == -1) {
@@ -90,7 +88,8 @@ public class IOManagerSync extends IOManager {
     if (logger.isDebugEnabled()) {
       logger.debug("getting daosreader for app id: " + appId + ", shuffle id: " + shuffleId);
     }
-    DaosReaderSync reader = new DaosReaderSync(getObject(appId, shuffleId), readerConfig, readerExes.nextExecutor());
+    DaosReaderSync reader = new DaosReaderSync(getObject(appId, shuffleId), readerConfig,
+        readerExes == null ? null : readerExes.nextExecutor());
     reader.setReaderMap(readerMap);
     return reader;
   }
@@ -101,7 +100,7 @@ public class IOManagerSync extends IOManager {
       readerExes.stop();
       readerExes = null;
     }
-    readerMap.keySet().forEach(r -> r.close());
+    readerMap.keySet().forEach(r -> r.close(true));
     readerMap.clear();
     if (writerExes != null) {
       writerExes.stop();

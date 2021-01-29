@@ -308,6 +308,7 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
   @Override
   protected boolean consumed(LinkedTaskContext context) {
     // release write buffers
+    @SuppressWarnings("unchecked")
     List<ByteBuf> bufList = (List<ByteBuf>) context.morePara;
     bufList.forEach(b -> b.release());
     bufList.clear();
@@ -509,6 +510,7 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
                             IODataDesc desc, Object bufList) {
       super(object, counter, writeLock, notFull);
       this.desc = desc;
+      @SuppressWarnings("unchecked")
       List<ByteBuf> myBufList = new ArrayList<>();
       myBufList.addAll((List<ByteBuf>) bufList);
       this.morePara = myBufList;
@@ -516,11 +518,14 @@ public class DaosWriterSync extends TaskSubmitter implements DaosWriter {
 
     @Override
     public WriteTaskContext getNext() {
-      return (WriteTaskContext) next;
+      @SuppressWarnings("unchecked")
+      WriteTaskContext ctx = (WriteTaskContext) next;
+      return ctx;
     }
 
     @Override
     public void reuse(IODataDesc desc, Object morePara) {
+      @SuppressWarnings("unchecked")
       List<ByteBuf> myBufList = (List<ByteBuf>) this.morePara;
       if (!myBufList.isEmpty()) {
         throw new IllegalStateException("bufList in reusing write task context should be empty");
